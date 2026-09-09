@@ -1,0 +1,9 @@
+pandas 
+numpy 
+matplotlib 
+jupyter 
+yfinance 
+statsmodels 
+scipy 
+requests 
+python-bcb
