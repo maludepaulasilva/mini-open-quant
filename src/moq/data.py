@@ -63,7 +63,7 @@ def fetch_cdi(start: str, end: str | None = None, years_per_chunk: int = 5) -> p
 def align_cdi(cdi_daily: pd.Series, prices: pd.DataFrame) -> pd.Series:
     """Coloca o CDI no mesmo calendário dos preços. Dias sem CDI viram 0."""
     if(cdi_daily > 0.01).any():
-        raise ValueError("CDI diário > 1%: a série está em % - dividida por 100")
+        raise ValueError("CDI diário > 1%: a série está em % - divida por 100")
     aligned = cdi_daily.reindex(prices.index)
     n_missing = int(aligned.isna().sum())
     if n_missing:
