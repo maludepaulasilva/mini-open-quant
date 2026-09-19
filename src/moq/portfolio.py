@@ -1,9 +1,11 @@
 """Portfólio - ranqueamento, alocação entre estratégias, risco."""
 
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
-from .metrics import TRADING_DAYS
+from .metrics import TRADING_DAYS, drawdown
 
 
 def _check_simplex(w) -> None:
@@ -78,3 +80,68 @@ def vol_target_scale(ret, target=0.10, window=21, max_leverage=2.0):
     """Fator diário = alvo / vol realizada (defasado 1 dia), limitado."""
     vol = ret.rolling(window).std(ddof=1) * np.sqrt(252)
     return (target / vol).clip(upper=max_leverage).shift(1).fillna(1.0)
+
+
+
+#RISK
+
+@dataclass(frozen=True)
+class DrawdownRule:
+    dd_half: float = -0.10
+    dd_stop: float = -0.15
+
+    def __post_init__(self):
+        if not (self.dd_stop < self.dd_half < 0):
+            raise ValueError("exigido dd_stop < dd_half < 0")
+
+
+FULL, HALF, STOP = 1.0, 0.5, 0.0
+
+
+def drawdown_control(ret: pd.Series, rule: DrawdownRule = DrawdownRule()) -> pd.Series:
+    """Exposição diária ∈ {0, 0.5, 1} conforme o drawdown de `ret`.
+
+    A decisão de t usa o drawdown até t−1, então o resultado já está alinhado ao
+    retorno de t — não dê outro shift na hora de aplicar.
+
+    Duas propriedades da regra que convém ter em mente:
+
+    - o gatilho é o drawdown de `ret` *sem* a regra, uma curva-sombra. Não é o
+      drawdown de quem segue a regra, logo o max_dd do resultado não fica
+      limitado a `dd_stop`;
+    - só se volta a FULL num novo topo histórico dessa sombra. Depois de um STOP
+      isso significa ficar de fora do repique inteiro, e na volta não se passa
+      por HALF (nele só se entra vindo de FULL). Rearmar mais cedo — a um
+      drawdown de −5%, digamos — é outra regra, não esta.
+    """
+    dd = drawdown(ret).shift(1).fillna(0.0)
+    exposure = np.empty(len(ret))
+    state = FULL
+    for t, d in enumerate(dd.to_numpy()):
+        if d >= -1e-12:                          state = FULL    # novo topo
+        elif d < rule.dd_stop:                   state = STOP
+        elif d < rule.dd_half and state == FULL:  state = HALF
+        exposure[t] = state
+    return pd.Series(exposure, index=ret.index, name="exposure")
+
+
+def apply_exposure(ret: pd.Series, exposure: pd.Series, cdi: pd.Series) -> pd.Series:
+    """Parte exposta segue o portfólio; o resto rende CDI."""
+    return exposure * ret + (1 - exposure) * cdi.reindex(ret.index)
+
+
+def rolling_risk_contribution(rets: pd.DataFrame, w: pd.Series, window: int = 126) -> pd.DataFrame:
+    """Fração da variância do portfólio devida a cada estratégia, em janela móvel.
+
+    As frações somam 1 e podem ser negativas: contribuição < 0 é estratégia que
+    tira risco do book. Por isso não se plota isso com `.plot.area()`, que
+    empilha e exige sinal constante por coluna — veja o notebook 11.
+    """
+    out = {}
+    wv = w.reindex(rets.columns).to_numpy()
+    for end in range(window, len(rets) + 1):
+        cov = rets.iloc[end - window:end].cov().to_numpy()
+        rc = wv * (cov @ wv)
+        var = rc.sum()
+        out[rets.index[end - 1]] = rc / var if var > 0 else np.full(len(wv), np.nan)
+    return pd.DataFrame(out, index=rets.columns).T

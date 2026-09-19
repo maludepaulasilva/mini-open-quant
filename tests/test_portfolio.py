@@ -34,3 +34,47 @@ def test_risk_contributions_sum_to_variance(rets):
     w = portfolio.risk_parity(rets)
     rc = portfolio.risk_contribution(rets, w)
     assert rc.sum() == pytest.approx(float(w @ (rets.cov() * 252) @ w), abs=1e-12)
+
+
+#RISK
+
+def _serie(*trechos):
+    path = np.concatenate([np.full(n, r) for n, r in trechos])
+    return pd.Series(path, index=pd.bdate_range("2020-01-01", periods=len(path)))
+
+
+def test_drawdown_state_machine():
+    # cai 12% (→ HALF), cai a −16% (→ STOP), recupera o pico (→ FULL) sem passar por HALF na volta
+    ret = _serie((50, 0.002), (60, -0.0021), (20, -0.0025), (200, 0.003))
+    exp = portfolio.drawdown_control(ret, portfolio.DrawdownRule(-0.10, -0.15))
+    first_half = exp[exp == 0.5].index[0]
+    first_stop = exp[exp == 0.0].index[0]
+    assert first_half < first_stop
+    # na volta de um STOP fica-se em 0 até o novo topo: recuperação parcial não devolve HALF
+    volta = exp[first_stop:]
+    first_full = volta[volta == 1.0].index[0]
+    assert (exp.loc[first_stop:first_full].iloc[:-1] == 0.0).all()
+    assert exp.iloc[-1] == 1.0
+
+
+def test_half_volta_a_valer_depois_de_novo_topo():
+    # STOP → novo topo (FULL) → cai 11% de novo: o HALF reaparece, a histerese não o proíbe
+    ret = _serie((50, 0.002), (80, -0.0021), (260, 0.003), (40, -0.003))
+    exp = portfolio.drawdown_control(ret, portfolio.DrawdownRule(-0.10, -0.15))
+    first_stop = exp[exp == 0.0].index[0]
+    assert (exp[first_stop:] == 0.5).any()
+
+
+def test_drawdown_control_nao_olha_o_futuro():
+    # a exposição de t sai do drawdown até t−1, então mexer no último retorno não muda nada
+    ret = _serie((50, 0.002), (60, -0.0021), (20, -0.0025), (200, 0.003))
+    outro = ret.copy()
+    outro.iloc[-1] = -0.5
+    assert portfolio.drawdown_control(ret).equals(portfolio.drawdown_control(outro))
+
+
+def test_rolling_risk_contribution_soma_um(rets):
+    w = portfolio.risk_parity(rets)
+    rc = portfolio.rolling_risk_contribution(rets, w, window=126)
+    assert len(rc) == len(rets) - 126 + 1
+    assert rc.sum(axis=1).sub(1.0).abs().max() < 1e-12

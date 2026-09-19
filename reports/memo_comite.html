@@ -1,0 +1,255 @@
+<h1>Memo - Mini Open Quant: alocador de estratégias sistemáticas na B3</h1>
+<p><strong>Para:</strong> Comitê de investimentos · <strong>De:</strong> Maria Luisa · <strong>Data:</strong> 19/09/2026</p>
+<h2>1. Resumo executivo</h2>
+<p>Combinar as quatro estratégias não bateu a melhor estratégia isolada, e nenhuma das duas bate o CDI de forma distinguível de zero.</p>
+<ul>
+<li>
+<p><strong>O que foi feito</strong>.
+Um alocador de quatro estratégias sistemáticas - momentum, reversão à média, par cointegrado e carry na curva DI - sobre 23 ações da B3 e o pré de 1 ano, de 2015 a 2026, com 10 bps de custo por unidade de peso negociada e parâmetros escolhidos por walk-forward.</p>
+</li>
+<li>
+<p><strong>O resultado, em um número</strong>.
+Com os pesos escolhidos sem olhar o resultado (treino de 3 anos, teste de 1 ano), a melhor combinação entrega Sharpe +0,08 em 2018-2026; o momentum isolado, na mesma janela, entrega +0,22. Em 2.163 pregões, os dois são estatisticamente indistinguíveis de zero - e o momentum só é "a melhor isolada" depois de eu ter visto o resultado das quatro.</p>
+</li>
+<li>
+<p><strong>Recomendação: não alocar capital</strong>.
+A tese de diversificação se confirmou (correlação média de 0,02 entre as estratégias, vol da carteira de paridade de risco em 1,8% ao ano), mas diversificação sem retorno esperado positivo produz um CDI caro. O único componente com Sharpe positivo é o momentum, e é justamente o mais contaminado pela limitação abaixo. O que eu recomendo é reconstruir o universo com o CATAHIST da B3 e repetir a Fase 5 antes de qualquer decisão de alocação.</p>
+</li>
+<li>
+<p><strong>Maior limitação.</strong>
+Viés de sobrevivência: os 23 tickers foram escolhidos hoje, entre os que continuam grandes e líquidos. Informação do futuro entrou na seleção do passado, o erro tem sempre o mesmo sinal e não sai com mais dados nem com validação cruzada.</p>
+</li>
+</ul>
+<h2>2. Universo e dados</h2>
+<p>23 ações da B3 com série completa de 2012 a 2026, sem um único NaN depois da limpeza. Partiram de 30 tickers escritos à mão: as maiores e mais líquidas do Ibovespa, com setores repetidos de propósito porque a estratégia de pares precisa de candidatos parecidos.</p>
+<p>As 7 remoções são de dois tipos, e só um é problema: ELET3, EMBR3 e JBSS3 voltaram vazias do provedor (100% ausente), e BBSE3, RAIL3, BPAC11 e HAPV3 existem, mas não desde 2012 - a regra de 5% de dados faltantes derruba as quatro porque a janela começa em 2012. O efeito é um universo que não muda de tamanho: 23 ativos em todos os 3.653 pregões. Um universo honesto deveria crescer conforme as empresas abriam capital; o meu não cresce porque foi recortado para não crescer.</p>
+<p>As outras três séries: <strong>CDI</strong> da série 12 do SGS/BCB, em decimal (2023 acumula 13,04% na série original e 12,99% alinhado ao calendário da B3 - a diferença de 0,05 p.p. empurra sempre a favor da estratégia); <strong>curva pré de 1 ano</strong> do Tesouro Transparente, tomando a cada dia o Tesouro Prefixado com prazo mais próximo de 365 dias corridos (mediana de 67 dias de distância do alvo, p90 de 163); e os <strong>fatores do NEFIN/USP</strong> (MKT, SMB, HML, WML), que não entram em estratégia nenhuma e servem só de régua. Vale registrar o que o MKT diz do período: de 2012 a 2026 o mercado brasileiro acumulou <strong>−7% acima do CDI</strong>. O benchmark deste memo é duro por construção.</p>
+<h2>3. Estratégias</h2>
+<p>Cada estratégia devolve uma matriz de pesos (datas × ativos), defasada em 1 dia por decorador e com exposição bruta Σ|w| ≤ 1 verificada por asserção - nada aqui usa o preço do próprio dia. O custo de 10 bps incide sobre Σ|Δw| de cada pregão.</p>
+<table>
+<thead>
+<tr>
+<th>estratégia</th>
+<th>o que faz</th>
+<th>parâmetros</th>
+<th>giro/ano</th>
+<th>breakeven de custo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>momentum</strong></td>
+<td>compra o top 20-30% por retorno de 6-12 meses, pulando o último mês; long-only, rebalanceio mensal</td>
+<td><code>lookback</code> ∈ {126, 252}, <code>skip</code>=21, <code>top</code> ∈ {0,2; 0,3}</td>
+<td>5,3×</td>
+<td><strong>238 bps</strong></td>
+</tr>
+<tr>
+<td><strong>reversão</strong></td>
+<td>posição contra o z-score do retorno de 5-10 dias (janela de 60); long-short com Σ</td>
+<td>w</td>
+<td>= 1</td>
+<td><code>short</code> ∈ {5, 10}, <code>long</code>=60, <code>threshold</code> ∈ {1,5; 2,0}</td>
+</tr>
+<tr>
+<td><strong>pares</strong></td>
+<td>spread log(ITUB4) − β·log(BBDC4) com β rolante; entra em |z| &gt; entry, sai em |z| &lt; 0,5, stop em |z| &gt; 4</td>
+<td><code>entry</code> ∈ {1,5; 2,0}, <code>window</code> ∈ {126, 252}</td>
+<td>3,0×</td>
+<td><strong>−166 bps</strong></td>
+</tr>
+<tr>
+<td><strong>carry</strong></td>
+<td>fica no pré de 1 ano quando a inclinação (pré − CDI anual) passa a média móvel + 1 desvio; senão, CDI</td>
+<td><code>window</code>=252, <code>k</code>=1,0 (sem grade)</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Duas coisas que a coluna de breakeven já entrega, antes de qualquer discussão de Sharpe:</p>
+<ul>
+<li><strong>A reversão não é uma estratégia cara, é uma estratégia que só existe em planilha sem custo.</strong> Ela gira a carteira 254 vezes por ano e empata com o CDI a <strong>1,6 bps</strong> de custo. Com os 10 bps do projeto o Sharpe vai de +0,13 para −0,68; com 30 bps, para −2,30.</li>
+<li><strong>O par nunca passou no teste de cointegração</strong> (p = 0,43), e o breakeven negativo diz a mesma coisa por outro caminho: ele perde do CDI de graça, sem pagar corretagem nenhuma.</li>
+</ul>
+<p>O carry merece um registro à parte porque a leitura dele mudou quando a curva simulada virou curva real: <strong>o pré de 1 ano só está acima do CDI em 51,6% dos dias</strong>, com inclinação média de +0,17 p.p. Não existe prêmio de prazo permanente nessa ponta - a inclinação é fortemente positiva quando o mercado precifica alta da Selic (2021: +2,6 p.p.) e negativa quando precifica corte (2016, 2017, 2023: entre −0,9 e −1,4 p.p.). O carry, portanto, não captura prêmio de risco: aposta que a expectativa embutida na curva está errada para cima, e o sinal por média móvel liga justamente perto do topo do ciclo.</p>
+<h2>4. Validação</h2>
+<p>O motor é uma conta só, igual para as quatro: <code>r = Σ w·r − Σ|Δw|·bps/1e4 + (1 − Σ|w|)⁺·cdi</code>. Duas defesas foram montadas em cima dela.</p>
+<p><strong>Primeira: medir o tamanho do acaso.</strong> Varri 60 combinações de parâmetros do momentum num mercado sintético sem sinal nenhum - 20 ativos em passeio aleatório puro. A melhor das 60 deu <strong>Sharpe +0,73</strong>, a mediana +0,15 e a pior −0,44. Quase 1,2 de Sharpe de distância entre a melhor e a pior configuração, tudo ruído, por construção. Essa é a régua com que o resto do memo tem que ser lido: um Sharpe positivo só informa junto com a resposta a "de quantas tentativas ele é o melhor?".</p>
+<p><strong>Segunda: escolher num lugar, medir em outro.</strong> Walk-forward de treino de 3 anos e teste de 1, andando um ano por vez - 12 folds, grades de quatro combinações cada, escritas antes de rodar e não mexidas depois. O teste recebe pregões anteriores só para encher as janelas (<code>warmup</code> dimensionado pela maior janela da grade: 300 no momentum, 505 nos pares); só os dias do ano de teste entram na conta.</p>
+<table>
+<thead>
+<tr>
+<th>estratégia</th>
+<th>Sharpe médio no treino</th>
+<th>Sharpe médio no teste</th>
+<th>folds em que caiu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>momentum</td>
+<td>+0,48</td>
+<td><strong>+0,25</strong></td>
+<td>8/12</td>
+</tr>
+<tr>
+<td>reversão</td>
+<td>−0,10</td>
+<td><strong>−0,92</strong></td>
+<td>10/12</td>
+</tr>
+<tr>
+<td>pares</td>
+<td>−0,30</td>
+<td><strong>−0,80</strong></td>
+<td>9/12</td>
+</tr>
+</tbody>
+</table>
+<p>A queda do treino para o teste é a medida do otimismo que havia antes. Mas o achado mais informativo não está nos números: está nos <strong>parâmetros escolhidos, que não estabilizam</strong>. No momentum o treino pediu <code>lookback</code>=252 em 7 folds e 126 em 5; <code>top</code>=0,2 em 7 e 0,3 em 5. É cara ou coroa. Se a vantagem de um parâmetro fosse real, ele venceria de forma consistente ano após ano.</p>
+<p>Nenhum fold tem Sharpe de treino absurdo (o maior é +1,34, em 2020), o que afasta suspeita de vazamento de dado: o problema é falta de sinal, não look-ahead. O carry não passa pelo walk-forward porque não tem grade - nada nele foi escolhido olhando resultado, então não há o que tirar da amostra.</p>
+<h2>5. Resultados fora da amostra</h2>
+<p><strong>As quatro isoladas</strong>, 2015-2026, 2.912 pregões, já com 10 bps. CDI no período: 10,0% ao ano.</p>
+<table>
+<thead>
+<tr>
+<th>série</th>
+<th>ret. anual</th>
+<th>vol anual</th>
+<th>Sharpe</th>
+<th>max DD</th>
+<th>corr. média</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>momentum</td>
+<td><strong>16,6%</strong></td>
+<td>26,6%</td>
+<td><strong>+0,35</strong></td>
+<td>−54,1%</td>
+<td>+0,03</td>
+</tr>
+<tr>
+<td>carry</td>
+<td>9,9%</td>
+<td>1,0%</td>
+<td>−0,08</td>
+<td>−2,5%</td>
+<td>+0,02</td>
+</tr>
+<tr>
+<td>pares</td>
+<td>3,7%</td>
+<td>8,9%</td>
+<td>−0,62</td>
+<td>−17,6%</td>
+<td>−0,03</td>
+</tr>
+<tr>
+<td>reversão</td>
+<td>−21,3%</td>
+<td>34,3%</td>
+<td>−0,79</td>
+<td>−95,4%</td>
+<td>+0,05</td>
+</tr>
+</tbody>
+</table>
+<p>A boa não é a diferente. A única acima do CDI é o momentum, e é caríssima em risco (vol de 26,6%, drawdown de −54%); a única com correlação média negativa é o par, que rende 3,7% ao ano; a mais mansa é o carry, que é quase caixa com ruído. A reversão perde em tudo e ainda é a de maior correlação média.</p>
+<p>A degradação de cada uma, na mesma régua (Sharpe do excesso sobre o CDI):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>sem custo</th>
+<th>amostra toda, 10 bps</th>
+<th>fora da amostra, 10 bps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>momentum</td>
+<td>+0,50</td>
+<td>+0,48</td>
+<td><strong>+0,35</strong></td>
+</tr>
+<tr>
+<td>reversão</td>
+<td>+0,13</td>
+<td>−0,68</td>
+<td><strong>−0,79</strong></td>
+</tr>
+<tr>
+<td>pares</td>
+<td>−0,60</td>
+<td>−0,63</td>
+<td><strong>−0,62</strong></td>
+</tr>
+<tr>
+<td>carry</td>
+<td>−0,09</td>
+<td>—</td>
+<td><strong>−0,08</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>As três combinações.</strong> Com os pesos calculados na amostra inteira - isto é, espiando o gabarito - e depois com os pesos refeitos em janela rolante de 3 anos, que é a versão em que eu acredito:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>pesos da amostra toda (2015-26)</th>
+<th>mesmo, recortado em 2018-26</th>
+<th><strong>pesos rolantes (2018-26)</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>pesos iguais</td>
+<td>−0,50</td>
+<td>−0,57</td>
+<td><strong>−0,57</strong></td>
+</tr>
+<tr>
+<td>paridade de risco</td>
+<td>−0,55</td>
+<td>−0,67</td>
+<td><strong>−0,74</strong></td>
+</tr>
+<tr>
+<td>máximo Sharpe</td>
+<td><strong>+0,25</strong></td>
+<td>+0,14</td>
+<td><strong>+0,08</strong></td>
+</tr>
+<tr>
+<td>melhor isolada (momentum)</td>
+<td>+0,35</td>
+<td>+0,22</td>
+<td>+0,22</td>
+</tr>
+</tbody>
+</table>
+<p>O <code>max_sharpe</code> perde <strong>dois terços</strong> do resultado quando para de espiar (0,25 → 0,08), e a coluna do meio separa as duas causas: metade é só o período, metade é o gabarito. Ele era, aliás, o único método acima do CDI - e é o único que usa médias históricas para decidir peso. Pesos iguais não muda nada entre as duas últimas colunas, como tem que ser: não usa dado nenhum, logo não existe versão dele fora da amostra.</p>
+<p><strong>O tamanho do erro.</strong> Para Sharpe anualizado, o erro padrão é da ordem de √(252/n): em 2.163 pregões, <strong>±0,34</strong>. Os dois números que sobraram - +0,08 da melhor combinação e +0,22 do momentum - ficam a 0,2 e 0,6 erro padrão de zero. Não são resultados pequenos: são resultados ausentes.</p>
+<p><strong>E o retorno é do mercado, não meu.</strong> Na regressão contra os quatro fatores do NEFIN, <strong>nenhum alpha positivo em lugar nenhum da tabela</strong>. O momentum tem alpha de −1,3% ao ano (t = −0,28) com β<sub>MKT</sub> = 0,94, β<sub>WML</sub> = 0,35 e R² = 0,66: comprar as ações que mais subiram é estar quase inteiramente comprado no mercado, e o Sharpe de +0,35 é beta, que se compra num ETF sem backtest nenhum. O <code>max_sharpe</code> é uma versão desalavancada disso (alpha −1,7%, t = −0,87, β<sub>MKT</sub> = 0,36). Reversão (−31,1%, t = −3,07) e pares (−5,7%, t = −2,19) têm alpha negativo com significância; só o carry tem alpha indistinguível de zero por mérito, e não por falta de dado.</p>
+<h2>6. Risco</h2>
+<p>A carteira arquivada em <code>data/processed/portfolio_final.parquet</code> é a paridade de risco alavancada em 2×, com o empréstimo cobrado a CDI: <strong>7,7% ao ano, vol de 3,4%, drawdown máximo de −5,7%, Sharpe −0,60</strong>. Cinco observações sobre ela.</p>
+<ul>
+<li><strong>A mesma carteira sem cobrar o funding daria Sharpe +2,19.</strong> É o número mais bonito do projeto e é integralmente artificial: a fórmula ingênua remunera a sobra quando <code>k</code> &lt; 1 e não cobra nada quando <code>k</code> &gt; 1, ou seja, toma emprestado a juro zero. A CDI + 1% ao ano - ainda otimista para pessoa física - o Sharpe é −0,89. Alavancar carteira que rende menos que o custo do dinheiro só multiplica o prejuízo.</li>
+<li><strong>Não há vol targeting nenhum aqui.</strong> O alvo de 10% exigiria 5,6× de alavancagem sobre uma carteira de vol 1,8%, e o teto é 2: <code>k</code> fica grudado em 2,0 em <strong>98,2% dos pregões</strong> e nunca cai abaixo de 1. É uma posição alavancada em 2× de ponta a ponta com o nome errado. Para o mecanismo operar, o alvo teria que ser compatível com a carteira - algo como 3%.</li>
+<li><strong>A regra de corte por drawdown é inerte nos limiares de livro.</strong> Com −10%/−15% ela nunca dispara: os 2.912 pregões ficam em exposição cheia, porque o pior drawdown da carteira é −5,7%. Recalibrando para −3%/−4,5% - calibragem à posteriori, leia como ilustração - a regra passa a atuar em 342 dias, o drawdown máximo cai para −4,5% e o Sharpe piora de −0,60 para <strong>−0,86</strong>: a parada trava o prejuízo e perde o repique. E nenhuma troca de estado paga corretagem no modelo.</li>
+<li><strong>Peso em dinheiro não é peso em risco.</strong> Com 25% em cada, a reversão ocupava <strong>60% do risco</strong> da carteira e o carry 0% - "pesos iguais" era, na prática, uma aposta na pior das quatro. A paridade de risco iguala de fato as frações (22% a 27% cada), mas o preço é colocar <strong>84,4% do dinheiro no carry</strong> e 3,3% no momentum.</li>
+<li><strong>Choques.</strong> Beta de mercado da carteira final: 0,055, medido direto na série alavancada - fazer Σ w·β sem a alavancagem subestima por ~2×. Bolsa −30% em um dia ≈ <strong>−1,6%</strong> na carteira. Juros +300 bps em um dia ≈ <strong>−1,6%</strong> (β de −0,31 por 100% de Δy, R² = 0,33, y de 13,68% hoje). Se todas as correlações fossem a 1, a vol iria de 3,4% para 6,9% - é esse o tamanho do ganho de diversificação.</li>
+</ul>
+<p>E a ressalva que vale mais que as cinco: <strong>a diversificação some no dia em que ela serviria</strong>. Nos 5% piores dias do mercado (143 pregões), a correlação momentum × reversão vai de +0,15 para <strong>+0,60</strong>, e o par, que parecia hedge por ser o único com correlação negativa, troca de sinal (−0,10 → +0,10). As duas estratégias que carregam risco de verdade são independentes nos dias normais e viram a mesma aposta no dia ruim. O que continua descorrelacionado no estresse é o carry - e o mérito dele é não ter comportamento nenhum.</p>
+<h2>7. O que faria diferente (5 pontos honestos)</h2>
+<ol>
+<li><strong>Reconstruir o universo ano a ano com o COTAHIST da B3.</strong> É o conserto mais importante e o único que não é um ajuste de modelo: enquanto os tickers forem escolhidos entre os sobreviventes de hoje, todo resultado é um teto, o erro tem sempre o mesmo sinal, e o mais contaminado é justamente o momentum - a única estratégia que sobrou com Sharpe positivo.</li>
+<li><strong>Cobrar o que as pernas vendidas custam.</strong> O modelo trata compra e venda igual, a 10 bps sobre Σ|Δw|. Vender exige alugar o papel (de meio a vários por cento ao ano, muito mais em papel difícil), e o custo linear ignora impacto de mercado - que cresce com o tamanho da ordem relativo ao volume, dado que esta base nem tem. Pares e a perna curta da reversão pioram, e a reversão, com 254 giros por ano, é a mais exposta.</li>
+<li><strong>Cobrar também o giro <em>entre</em> as estratégias.</strong> Os 10 bps cobrem o rebalanceamento dentro de cada estratégia. A combinação assume pesos fixos com rebalanceamento diário implícito, e o vol targeting muda o tamanho da posição todo dia - nenhuma das duas coisas paga nada. Faltou uma coluna de turnover na tabela de combinações.</li>
+<li><strong>Aposentar o <code>max_sharpe</code> como está e reportar só a janela rolante.</strong> A seção 5 mostra que <code>w_max</code> <strong>é</strong> a alocação (1,0 dá 100% momentum, 0,25 dá pesos iguais, e nos casos intermediários pelo menos duas estratégias ficam grudadas no teto), e que o <code>shrink</code> não muda nada até mudar tudo (em 0,75 a reversão salta de 0 para 40%). Pesos que dependem assim de um parâmetro que não tenho como calibrar não são resposta de otimizador, são número digitado. Junto com isso: covariância de amostra única num regime que não é fixo.</li>
+<li><strong>Testar em outro recorte antes de chamar qualquer coisa de conclusão.</strong> Um par, um ativo de carry, um universo, um país. E reportar o intervalo de confiança do Sharpe ao lado do Sharpe - a seção 5 mostra que, com ±0,34 de erro padrão, quase tudo que este projeto produziu cabe dentro de zero.</li>
+</ol>

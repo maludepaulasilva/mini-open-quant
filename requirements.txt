@@ -7,3 +7,5 @@ statsmodels
 scipy 
 requests 
 python-bcb
+pytest
+pyarrow
