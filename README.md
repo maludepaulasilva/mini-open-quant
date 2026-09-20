@@ -47,4 +47,5 @@ Os notebooks de número ímpar (`03`, `05`, `07`, `09`, `11`) são os rascunhos 
 5. **Um só recorte** — um par, um ativo de carry, um universo, um país. Sem intervalo de confiança ao lado do Sharpe, nada disso é conclusão.
 
 Detalhe e números em [`reports/memo_comite.md`](reports/memo_comite.md).
-Artigo completo em [`Mini Open Quant-1.pdf`](./Mini Open Quant-1.pdf).
+
+Artigo completo em [`Mini Open Quant-1.pdf`](./Mini_Open_Quant-1.pdf).
